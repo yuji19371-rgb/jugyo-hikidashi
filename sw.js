@@ -1,6 +1,6 @@
 // 授業の引き出し Service Worker
 // VERSION は tools/build.py が更新します。アプリ本体を変えたときは必ず更新してください。
-const VERSION = "20260927-143145";
+const VERSION = "20260927-155406";
 const SHELL_CACHE = "hikidashi-shell-" + VERSION;
 const DATA_CACHE = "hikidashi-data";
 const FONT_CACHE = "hikidashi-fonts";
@@ -8,7 +8,7 @@ const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(SHELL_CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(SHELL_CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, {cache: "reload"})))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys
@@ -34,8 +34,17 @@ self.addEventListener("fetch", e => {
     })));
     return;
   }
-  // アプリ本体：保存したものを使う（オフラインでも起動）
+  // アプリ本体（画面とプログラム）：ネット優先で最新を取得し、オフライン時は保存したものを使う
   if (url.origin === location.origin) {
+    const isCore = req.mode === "navigate" || url.pathname.endsWith("/") || url.pathname.endsWith("/index.html") || url.pathname.endsWith("/app.js");
+    if (isCore) {
+      e.respondWith(fetch(new Request(req, {cache: "no-cache"})).then(res => {
+        if (res.ok) { const copy = res.clone(); caches.open(SHELL_CACHE).then(c => c.put(req.mode === "navigate" ? "./index.html" : req, copy)); }
+        return res;
+      }).catch(() => caches.match(req, {ignoreSearch: true}).then(hit => hit || caches.match("./index.html"))));
+      return;
+    }
+    // アイコンなど：保存したものを使う
     e.respondWith(caches.match(req, {ignoreSearch: true}).then(hit => hit || fetch(req).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(SHELL_CACHE).then(c => c.put(req, copy)); }
       return res;

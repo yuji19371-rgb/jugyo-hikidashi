@@ -216,7 +216,7 @@ nav a[aria-current="page"]{color:var(--ai);font-weight:700}
 (function(){
   function fail(){document.getElementById("app").innerHTML='<p class="loading">データを読み込めませんでした。<br>インターネットに接続して、もう一度開いてください。</p>'}
   fetch("data.json",{cache:"no-cache"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){
-    window.__DATA=d; var s=document.createElement("script"); s.src="app.js?v="+encodeURIComponent(d.builtAt||""); document.body.appendChild(s);
+    window.__DATA=d; var s=document.createElement("script"); s.src="app.js?v="+encodeURIComponent(d.buildId||d.builtAt||""); document.body.appendChild(s);
   }).catch(fail);
   if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}
 })();
