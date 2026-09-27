@@ -10,6 +10,36 @@ DATA.terms=DATA.terms||[];DATA.fields=DATA.fields||[];
 const TM=Object.fromEntries(DATA.terms.map(t=>[t.id,t]));
 const TBYP={};DATA.terms.forEach(t=>t.relProbs.forEach(pid=>{(TBYP[pid]=TBYP[pid]||[]).push(t.id)}));
 let fld="すべて", tq="";
+const STAGES=["養成","初任","中堅"], LEVELS=["入門","初級","中級","上級"];
+const SKILLS=["話す","聞く","読む","書く","文字","語彙","文法","発音"];
+const SCENES=["授業準備","導入・説明","練習・活動","問題の解説","まとめ・振り返り","評価","クラス運営","授業外"];
+const LV={"入門":[0],"初級":[1],"初中級":[1,2],"中級":[2],"中上級":[2,3],"上級":[3]};
+function levelsOf(p){
+  const s=p.level||""; if(!s||s.includes("全レベル")) return {all:true,set:[0,1,2,3]};
+  const parts=s.split(/[〜～~]/).map(x=>x.trim());
+  let idx=[]; parts.forEach(x=>{(LV[x]||[]).forEach(i=>idx.push(i))});
+  if(!idx.length) return {all:true,set:[0,1,2,3]};
+  const lo=Math.min(...idx), hi=Math.max(...idx); const set=[]; for(let i=lo;i<=hi;i++) set.push(i);
+  return {all:false,set};
+}
+S.prefs=S.prefs||{stage:"",level:""};
+let F={stage:S.prefs.stage||"",level:S.prefs.level||"",skill:"",scene:""};
+function matchF(p,f){ f=f||F;
+  if(f.stage && !(p.stages||[]).includes(f.stage)) return false;
+  if(f.level && !levelsOf(p).set.includes(LEVELS.indexOf(f.level))) return false;
+  if(f.skill && !(p.skills||[]).includes(f.skill)) return false;
+  if(f.scene && !(p.scenes||[]).includes(f.scene)) return false;
+  return true;}
+function sel(id,label,opts,val){return `<label class="fsel"><span>${label}</span><select id="${id}"><option value="">すべて</option>${opts.map(o=>`<option ${o===val?"selected":""}>${o}</option>`).join("")}</select></label>`}
+function filterBar(){
+  const on=F.stage||F.level||F.skill||F.scene;
+  return `<div class="fbar">${sel("f-stage","教師の段階",STAGES,F.stage)}${sel("f-level","学習者のレベル",LEVELS,F.level)}${sel("f-skill","技能",SKILLS,F.skill)}${sel("f-scene","授業の場面",SCENES,F.scene)}</div>${on?`<button class="fclear" id="fclear">絞り込みをすべて解除</button>`:""}`}
+function bindFilter(redraw){
+  [["f-stage","stage"],["f-level","level"],["f-skill","skill"],["f-scene","scene"]].forEach(([id,k])=>{const e=document.getElementById(id); if(e) e.onchange=()=>{F[k]=e.value;redraw()}});
+  const c=document.getElementById("fclear"); if(c) c.onclick=()=>{F={stage:"",level:"",skill:"",scene:""};redraw()};
+}
+function goFilter(k,v){F={stage:S.prefs.stage||"",level:S.prefs.level||"",skill:"",scene:""};F[k]=v;location.hash="#/c/"+encodeURIComponent("すべて");}
+
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt=d=>{const t=new Date(d);return `${t.getFullYear()}年${t.getMonth()+1}月${t.getDate()}日`};
 const app=document.getElementById("app");
@@ -44,7 +74,7 @@ function home(){
     <ul class="list tlist">${tr.length?tr.map(titem).join(""):`<li class="empty">当てはまる用語はありません。</li>`}</ul>`;
   };
   const drawTop=()=>{
-    const tp=DATA.problems[dayIndex(DATA.problems.length,0)];
+    const _pool=DATA.problems.filter(p=>matchF(p,{stage:S.prefs.stage,level:S.prefs.level})); const _tp=_pool.length?_pool:DATA.problems; const tp=_tp[dayIndex(_tp.length,0)];
     const tt=DATA.terms.length?DATA.terms[dayIndex(DATA.terms.length,7)]:null;
     const recent=Object.entries(S.views).filter(([id])=>P[id]).sort((a,b)=>b[1].last-a[1].last).slice(0,4).map(([id])=>P[id]);
     const pct=Math.round(readN/totalN*100);
@@ -59,7 +89,12 @@ function home(){
     <h2 class="sec">カテゴリーから探す</h2>
     <div class="grid">${DATA.categories.map(c=>{const ps=DATA.problems.filter(p=>p.cat===c.name);const rd=ps.filter(p=>seen(p.id)).length;
       return `<a class="tile" href="#/c/${encodeURIComponent(c.name)}"><b>${esc(c.name)}</b><span>${ps.length}件${rd?`・読んだ ${rd}`:""}</span></a>`}).join("")}</div>
-    <a class="allbtn" href="#/c/${encodeURIComponent("すべて")}">すべての悩みを見る（${totalN}件）</a>`;
+    <h2 class="sec">技能から探す</h2>
+    <div class="qchips">${SKILLS.map(s=>`<button class="qc" data-k="skill" data-v="${s}">${s}<small>${DATA.problems.filter(p=>(p.skills||[]).includes(s)).length}</small></button>`).join("")}</div>
+    <h2 class="sec">授業の場面から探す</h2>
+    <div class="qchips">${SCENES.map(s=>`<button class="qc" data-k="scene" data-v="${s}">${s}<small>${DATA.problems.filter(p=>(p.scenes||[]).includes(s)).length}</small></button>`).join("")}</div>
+    <a class="allbtn" href="#/c/${encodeURIComponent("すべて")}">条件で絞り込んで探す（全${totalN}件）</a>`;
+    body.querySelectorAll(".qc").forEach(b=>b.onclick=()=>goFilter(b.dataset.k,b.dataset.v));
   };
   drawSearch();
   const ix=document.getElementById("itipx"); if(ix) ix.onclick=()=>{S.hideInstall=true;save();document.getElementById("itip").remove()};
@@ -70,7 +105,7 @@ function catView(name){
   const all=name==="すべて";
   const c=DATA.categories.find(x=>x.name===name);
   if(!all&&!c){home();return}
-  let r=DATA.problems.filter(p=>all||p.cat===name);
+  let r=DATA.problems.filter(p=>(all||p.cat===name)&&matchF(p));
   const sorts={num:"番号順",unread:"未読を先に",often:"よく見る順",recent:"最近見た順"};
   const v=id=>S.views[id]||{n:0,last:0};
   if(sortMode==="unread") r=[...r].sort((a,b)=>(seen(a.id)?1:0)-(seen(b.id)?1:0));
@@ -81,8 +116,10 @@ function catView(name){
   <h1 class="lead" style="margin-top:10px">${esc(all?"すべての悩み":name)}</h1>
   ${c?`<p class="catdesc">${esc(c.desc)}</p>`:""}
   <p class="catdesc">${r.length}件・読んだ ${rd}件</p>
+  ${filterBar()}
   <div class="chips" role="group" aria-label="並び替え">${Object.entries(sorts).map(([k,l])=>`<button class="chip" aria-pressed="${k===sortMode}" data-s="${k}">${l}</button>`).join("")}</div>
-  <ul class="list">${r.map(item).join("")}</ul>`;
+  <ul class="list">${r.length?r.map(item).join(""):`<li class="empty">この条件に当てはまる悩みはありません。絞り込みの条件を変えてみてください。</li>`}</ul>`;
+  bindFilter(()=>catView(name));
   app.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>{sortMode=b.dataset.s;catView(name)});
 }
 const arrow=`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 2v11M3.5 8.5L8 13l4.5-4.5"/></svg>`;
@@ -95,7 +132,7 @@ function detail(id){
   const memos=S.memos.filter(m=>m.pid===id).sort((a,b)=>b.date-a.date);
   const ul=(a,c="b")=>`<ul class="${c}">${a.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`;
   app.innerHTML=`<button class="back" onclick="history.length>1?history.back():location.hash='#/'">‹ もどる</button>
-  <div class="tags"><span class="tag">${esc(p.cat)}</span><span class="tag">${esc(p.level)}</span></div>
+  <div class="tags"><span class="tag">${esc(p.cat)}</span><span class="tag">${esc(p.level)}</span>${(p.stages||[]).map(x=>`<span class="tag st">${esc(x)}</span>`).join("")}${(p.skills||[]).map(x=>`<button class="tag tb" data-k="skill" data-v="${esc(x)}">${esc(x)}</button>`).join("")}${(p.scenes||[]).map(x=>`<button class="tag tb" data-k="scene" data-v="${esc(x)}">${esc(x)}</button>`).join("")}</div>
   <h1 class="dtitle">${esc(p.title)}</h1>
   <div class="actions">
    <button class="act fav" aria-pressed="${f}" id="bf">${f?"★ お気に入り済み":"☆ お気に入り"}</button>
@@ -122,6 +159,7 @@ function detail(id){
   ${p.ref?`<p class="ref">参考：${esc(p.ref)}</p>`:""}
   <div class="pn">${prevP?`<a href="#/p/${prevP.id}"><small>‹ 前の悩み</small>${esc(prevP.title)}</a>`:"<span></span>"}${nextP?`<a class="nx" href="#/p/${nextP.id}"><small>次の悩み ›</small>${esc(nextP.title)}</a>`:"<span></span>"}</div>
   <p class="ref" style="text-align:center">${esc(p.cat)}の悩み　${si+1} / ${sib.length}</p>`;
+  app.querySelectorAll(".tb").forEach(b=>b.onclick=()=>goFilter(b.dataset.k,b.dataset.v));
   document.getElementById("bf").onclick=()=>{S.fav=f?S.fav.filter(x=>x!==id):[...S.fav,id];save();toast(f?"お気に入りから外しました":"お気に入りに追加しました");detail(id)};
   document.getElementById("bt").onclick=()=>{if(tr)delete S.tried[id];else S.tried[id]=Date.now();save();toast(tr?"記録を取り消しました":"試した記録をつけました");detail(id)};
   const mt=document.getElementById("mt"),ms=document.getElementById("ms");
@@ -132,23 +170,38 @@ function detail(id){
 function titem(t){
   return `<li><a href="#/t/${t.id}"><span class="ttl">${esc(t.term)}<span class="meta">${esc(t.field)}</span><span class="short">${esc(t.short)}</span></span>
   <span class="marks">${S.favT.includes(t.id)?'<span class="m-star" aria-label="お気に入り">★</span>':''}</span></a></li>`}
+let tkb="", tkana="", tshow=30;
+const KANA_ROWS=[["あ","あいうえおぁぃぅぇぉ"],["か","かきくけこがぎぐげご"],["さ","さしすせそざじずぜぞ"],["た","たちつてとだぢづでどっ"],["な","なにぬねの"],["は","はひふへほばびぶべぼぱぴぷぺぽ"],["ま","まみむめも"],["や","やゆよゃゅょ"],["ら","らりるれろ"],["わ","わをんゎゔ"]];
+const KUBUN=["社会・文化・地域","言語と社会","言語と心理","言語と教育","言語"];
+function kanaRow(y){const c=(y||"").charAt(0);for(const [r,s] of KANA_ROWS){if(s.includes(c))return r}return "他"}
 function dict(){
   const fs=["すべて",...DATA.fields.map(f=>f.name)];
-  const desc=(DATA.fields.find(f=>f.name===fld)||{}).desc||`${DATA.terms.length}語を収録しています。`;
+  const desc=(DATA.fields.find(f=>f.name===fld)||{}).desc||"";
   app.innerHTML=`<p class="brand">授業の引き出し</p>
   <h1 class="lead">用語辞典</h1>
   <input class="search" id="tq" type="search" placeholder="例：中間言語、Can-do、敬語" value="${esc(tq)}" aria-label="用語を探す">
   <div class="chips" role="group" aria-label="分野">${fs.map(c=>`<button class="chip" aria-pressed="${c===fld}" data-c="${esc(c)}">${esc(c)}</button>`).join("")}</div>
-  <p class="catdesc">${esc(desc)}</p><ul class="list tlist" id="tl"></ul>`;
+  ${desc?`<p class="catdesc">${esc(desc)}</p>`:""}
+  <div class="fbar one">${sel("t-kubun","試験の区分（目安）",KUBUN,tkb)}</div>
+  <div class="kana" role="group" aria-label="五十音">${["すべて",...KANA_ROWS.map(r=>r[0])].map(k=>`<button class="kn" aria-pressed="${(k==="すべて"?"":k)===tkana}" data-k="${k==="すべて"?"":k}">${k}</button>`).join("")}</div>
+  <p class="catdesc" id="tcount"></p>
+  <ul class="list tlist" id="tl"></ul><div id="tmore"></div>`;
   const draw=()=>{
     const k=tq.trim();
-    let r=DATA.terms.filter(t=>(fld==="すべて"||t.field===fld)&&(!k||[t.term,t.yomi,t.short,t.desc,(t.ex||[]).join(" "),t.bg||""].join(" ").includes(k)));
-    if(fld!=="すべて"||k) r=[...r].sort((a,b)=>a.yomi.localeCompare(b.yomi,"ja"));
-    document.getElementById("tl").innerHTML=r.length?r.map(titem).join(""):`<li class="empty">「${esc(k)}」に当てはまる用語はまだありません。</li>`;
+    let r=DATA.terms.filter(t=>(fld==="すべて"||t.field===fld)&&(!tkb||t.kubun===tkb)&&(!tkana||kanaRow(t.yomi)===tkana)&&(!k||[t.term,t.yomi,t.short,t.desc,(t.ex||[]).join(" "),t.bg||""].join(" ").includes(k)));
+    r=[...r].sort((a,b)=>a.yomi.localeCompare(b.yomi,"ja"));
+    document.getElementById("tcount").textContent=`${r.length}語${r.length>tshow?`（${tshow}語まで表示中）`:""}`;
+    let html="",last="";
+    r.slice(0,tshow).forEach(t=>{const kr=kanaRow(t.yomi); if(kr!==last){html+=`<li class="khead">${kr}</li>`;last=kr} html+=titem(t)});
+    document.getElementById("tl").innerHTML=r.length?html:`<li class="empty">当てはまる用語はありません。条件を変えてみてください。</li>`;
+    document.getElementById("tmore").innerHTML=r.length>tshow?`<button class="allbtn more" id="tm">もっと見る（残り${r.length-tshow}語）</button>`:"";
+    const m=document.getElementById("tm"); if(m) m.onclick=()=>{tshow+=30;draw()};
   };
   draw();
-  document.getElementById("tq").addEventListener("input",e=>{tq=e.target.value;draw()});
-  app.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{fld=b.dataset.c;dict()});
+  document.getElementById("tq").addEventListener("input",e=>{tq=e.target.value;tshow=30;draw()});
+  app.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{fld=b.dataset.c;tshow=30;dict()});
+  app.querySelectorAll(".kn").forEach(b=>b.onclick=()=>{tkana=b.dataset.k;tshow=30;dict()});
+  const kb=document.getElementById("t-kubun"); kb.onchange=()=>{tkb=kb.value;tshow=30;dict()};
 }
 function term(id){
   const t=TM[id]; if(!t){app.innerHTML=`<p class="empty">この用語は見つかりません。<a href="#/dict">用語辞典にもどる</a></p>`;return}
@@ -156,7 +209,7 @@ function term(id){
   const f=S.favT.includes(id);
   const rt=t.relTerms.filter(x=>TM[x]), rp=t.relProbs.filter(x=>P[x]);
   app.innerHTML=`<button class="back" onclick="history.length>1?history.back():location.hash='#/dict'">‹ もどる</button>
-  <div class="tags"><span class="tag">${esc(t.field)}</span>${t.asof?`<span class="tag asof">情報の時点：${esc(t.asof)}</span>`:""}</div>
+  <div class="tags"><span class="tag">${esc(t.field)}</span>${t.kubun?`<span class="tag st">${esc(t.kubun)}</span>`:""}${t.asof?`<span class="tag asof">情報の時点：${esc(t.asof)}</span>`:""}</div>
   <h1 class="dtitle">${esc(t.term)}</h1>${t.yomi?`<p class="yomi">${esc(t.yomi)}</p>`:""}
   <p class="tshort">${esc(t.short)}</p>
   <div class="actions"><button class="act fav" aria-pressed="${f}" id="tf">${f?"★ お気に入り済み":"☆ お気に入り"}</button></div>
@@ -182,12 +235,16 @@ function log(){
   const ms=[...S.memos].filter(m=>P[m.pid]).sort((a,b)=>b.date-a.date);
   app.innerHTML=`<p class="brand">授業の引き出し</p><h1 class="lead">ふりかえり</h1>
   <div class="stat"><div><b>${tried.length}</b>授業で試した</div><div><b>${ms.length}</b>メモ</div><div><b>${DATA.problems.length}</b>登録された悩み</div></div>
+  <section class="prefs"><h2>わたしの設定</h2>
+  <p class="hint">設定すると、「今日の一つ」が自分に合った悩みから選ばれ、一覧の絞り込みの初期値にもなります。</p>
+  <div class="fbar">${sel("p-stage","教師の段階",STAGES,S.prefs.stage)}${sel("p-level","担当する学習者のレベル",LEVELS,S.prefs.level)}</div></section>
   <h2>試した悩み</h2><ul class="list">${tried.length?tried.sort((a,b)=>S.tried[b]-S.tried[a]).map(i=>item(P[i])).join(""):`<li class="empty">授業で試した悩みに「授業で試した」をつけると、ここに記録されます。</li>`}</ul>
   <h2 style="margin-top:28px">メモ</h2><ul class="memos">${ms.length?ms.map(m=>`<li><a class="from" href="#/p/${m.pid}">${esc(P[m.pid].title)}</a><time>${fmt(m.date)}</time>${esc(m.text)}</li>`).join(""):`<li class="empty" style="border:0">各悩みのページの「ふりかえりメモ」に書いたことが、ここにまとまります。</li>`}</ul>
   <section class="bk"><h2 style="margin-top:28px">記録のバックアップ</h2>
   <p class="hint">お気に入り・メモ・閲覧の記録は、この端末にだけ保存されています。機種変更の前などに、ファイルに書き出しておくと、新しい端末で読み込めます。</p>
   <div class="bkrow"><button class="act" id="exp">記録を書き出す</button><label class="act" for="imp">記録を読み込む</label><input type="file" id="imp" accept="application/json" hidden></div></section>
   <p class="ref" style="margin-top:22px">データ：悩み${DATA.problems.length}件・用語${DATA.terms.length}語${DATA.builtAt?`（${esc(DATA.builtAt)} 更新）`:""}</p>`;
+  bindPrefs();
   document.getElementById("exp").onclick=()=>{
     const blob=new Blob([JSON.stringify({app:"jugyo-hikidashi",version:1,savedAt:new Date().toISOString(),data:S},null,1)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);
@@ -203,6 +260,11 @@ function log(){
       }catch(err){ alert("このファイルは読み込めませんでした。書き出したバックアップファイルを選んでください。"); }
     }; r.readAsText(f);
   };
+}
+function bindPrefs(){
+  const a=document.getElementById("p-stage"),b=document.getElementById("p-level");
+  if(a) a.onchange=()=>{S.prefs.stage=a.value;F.stage=a.value;save();toast("設定を保存しました")};
+  if(b) b.onchange=()=>{S.prefs.level=b.value;F.level=b.value;save();toast("設定を保存しました")};
 }
 function route(){
   detail._same=null; term._same=null;
