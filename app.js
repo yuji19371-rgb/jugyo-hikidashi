@@ -49,96 +49,60 @@ const isDesk=()=>mq.matches;
 function listRoot(){return isDesk()&&side?side:app}
 let cat="すべて", q="";
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("on");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),1600)}
-function item(p,snip){
+function item(p){
   const f=S.fav.includes(p.id), tr=S.tried[p.id];
-  const sm=snip!==undefined?snip:(p.points||[])[0]||"";
-  return `<li><a href="#/p/${p.id}"><span class="ttl">${esc(p.title)}<span class="meta">${esc(p.cat)}／${esc(p.level)}</span>${sm?`<span class="sum">${esc(sm)}</span>`:""}</span>
+  return `<li><a href="#/p/${p.id}"><span class="ttl">${esc(p.title)}<span class="meta">${esc(p.cat)}／${esc(p.level)}</span></span>
   <span class="marks">${!seen(p.id)?'<span class="m-new" aria-label="未読">未読</span>':''}${f?'<span class="m-star" aria-label="お気に入り">★</span>':''}${tr?'<span class="m-tried" aria-label="試した">✓</span>':''}</span></a></li>`}
 function seen(id){const v=S.views[id];return !!v}
 function markView(id){const v=S.views[id]||{n:0,last:0};v.n++;v.last=Date.now();S.views[id]=v;save();}
 function dayIndex(n,salt){const d=new Date();const k=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate()+salt;let h=k;h=(h^(h>>>7))*2654435761>>>0;return h%n}
-/* ---- 検索 ---- */
-function norm(s){s=String(s||"").normalize("NFKC").toLowerCase();return s.replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).replace(/[\s・、。，．,.「」『』（）()〜~ー－\-]/g,"")}
-const PW=[["title",10],["keywords",6],["cat",3],["signs",3],["points",2],["causes",1],["ex",1],["practice",1]];
-const TW=[["term",10],["yomi",8],["short",4],["desc",2],["ex",1],["bg",1]];
-let _pidx=null,_tidx=null;
-function pIndex(){if(_pidx)return _pidx;_pidx=DATA.problems.map(p=>({p,f:{title:norm(p.title),keywords:norm((p.keywords||[]).join(" ")),cat:norm(p.cat),signs:norm((p.signs||[]).join(" ")),points:norm((p.points||[]).join(" ")),causes:norm((p.causes||[]).join(" ")),ex:norm((p.examples||[]).map(e=>e.scene+e.before+e.after+e.note).join(" ")),practice:norm((p.practice||[]).join(" "))}}));return _pidx}
-function tIndex(){if(_tidx)return _tidx;_tidx=DATA.terms.map(t=>({t,f:{term:norm(t.term),yomi:norm(t.yomi),short:norm(t.short),desc:norm(t.desc),ex:norm((t.ex||[]).join(" ")),bg:norm(t.bg)}}));return _tidx}
-const SYN={"けいご":["敬語"],"じょし":["助詞"],"ばんしょ":["板書"],"しご":["私語"],"ちこく":["遅刻"],"けっせき":["欠席"],"ひょうか":["評価"],"れいぶん":["例文"],"ちょうかい":["聴解"],"どっかい":["読解"],"かいわ":["会話"],"しじ":["指示"],"ごよう":["誤用"],"どうき":["動機"],"やるき":["やる気"],"せつめい":["説明"],"どうにゅう":["導入"],"ふくしゅう":["復習"],"えいが":["映画"],"めんせつ":["面接"],"しんろ":["進路"],"せいせき":["成績"],"ぶんけい":["文型"],"かつよう":["活用"],"ほめる":["ほめ"],"褒める":["ほめ"],"しかる":["注意"],"叱る":["注意"],"怒る":["イライラ","注意"],"携帯":["スマホ"],"スマートフォン":["スマホ"],"カンニング":["不正"],"遅れる":["遅刻"],"休む":["欠席"],"眠い":["居眠り"],"寝る":["居眠り"],"緊張":["自信","不安"],"話し方":["話し方","話す"],"しゅくだい":["宿題"],"さくぶん":["作文"],"はつおん":["発音"],"かんじ":["漢字"],"ぶんぽう":["文法"],"ごい":["語彙"],"しけん":["試験"]};
-function alts(t){const set=new Set([t]);(SYN[t]||[]).forEach(x=>set.add(norm(x)));
-  if(t.length>=2){DATA.terms.forEach(tm=>{const y=norm(tm.yomi);if(y===t||(t.length>=3&&y.startsWith(t))){set.add(norm(String(tm.term).replace(/（.*?）/g,"")))}})}
-  return [...set]}
-function searchAll(qs){
-  const raw=String(qs).split(/[\s　]+/).filter(Boolean); const toks=raw.map(norm).filter(Boolean); if(!toks.length) return {ps:[],ts:[]};
-  Object.keys(SYN).forEach(k=>{});
-  const AL=toks.map(t=>{const a=alts(t);const extra=(SYN[raw[toks.indexOf(t)]]||[]).map(norm);return [...new Set([...a,...extra])]});
-  const sc=(f,W)=>{let s=0;for(const al of AL){let hit=0;for(const [k,w] of W){if(f[k]&&al.some(t=>f[k].includes(t))){hit=Math.max(hit,w)}}if(!hit)return 0;s+=hit}return s};
-  const ps=pIndex().map(o=>({o,s:sc(o.f,PW)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).map(x=>x.o.p);
-  const ts=tIndex().map(o=>({o,s:sc(o.f,TW)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).map(x=>x.o.t);
-  return {ps,ts,toks};
-}
-function snippet(p,toks){
-  const src=[...(p.points||[]),...(p.signs||[]),...(p.causes||[]),...(p.practice||[])];
-  const al=toks.flatMap(t=>alts(t));
-  for(const s of src){if(al.some(t=>norm(s).includes(t)))return s}
-  return (p.points||[])[0]||"";
-}
-const POPULAR=["指示","敬語","私語","作文","発音","漢字","試験","やる気","板書","ロールプレイ","時間","ほめ方"];
-const GROUPS=[
- {name:"授業の準備と進め方",desc:"授業の組み立て、時間、教材、評価",cats:["授業の組み立て","評価"]},
- {name:"教え方と説明",desc:"説明、問題の解説、話し方、発音・文字",cats:["説明の技術","演習問題の解説","教師の話し方","発音・文字の指導"]},
- {name:"クラスと学生",desc:"クラスの雰囲気、学生との関わり、進路",cats:["教室運営","学習者対応","進路指導"]},
- {name:"教師としての自分",desc:"自己研鑽、同僚との関係、心の健康",cats:["教師としての成長"]}];
-function goCat(name){F={stage:S.prefs.stage||"",level:S.prefs.level||"",skill:"",scene:""};sortMode="num";location.hash="#/c/"+encodeURIComponent(name)}
-let sTab="p", sShow=20;
 function home(){
+  const k=q.trim();
   const readN=DATA.problems.filter(p=>seen(p.id)).length, totalN=DATA.problems.length;
-  const canTip=(typeof isStandalone==="function")&&!isStandalone()&&!S.hideInstall;
   app.innerHTML=`<p class="brand">授業の引き出し</p>
   <h1 class="lead">いま、授業で<br>困っていることは？</h1>
-  <div class="sbox"><input class="search" id="q" type="search" placeholder="例：指示が伝わらない、敬語、私語" value="${esc(q)}" aria-label="悩みや用語を探す" autocomplete="off">${q?`<button class="sclear" id="sclear" aria-label="入力を消す">×</button>`:""}</div>
-  <div class="pop" id="pop">${POPULAR.map(w=>`<button class="pw" data-w="${w}">${w}</button>`).join("")}</div>
+  <input class="search" id="q" type="search" placeholder="悩みや用語をキーワードで探す" value="${esc(q)}" aria-label="悩みや用語を探す">
+  ${!isStandalone()&&!S.hideInstall?`<div class="itip" id="itip"><b>ホーム画面やパソコンに追加すると、アプリのように使えます</b>
+   <span>iPhone：Safariの共有ボタン → 「ホーム画面に追加」<br>Android：Chromeのメニュー → 「アプリをインストール」または「ホーム画面に追加」<br>パソコン：Chrome・Edgeのアドレスバーにあるインストールのアイコン</span>
+   <button id="itipx" aria-label="この案内を閉じる">閉じる</button></div>`:""}
   <div id="homebody"></div>`;
   const body=document.getElementById("homebody");
   const drawSearch=()=>{
-    const k=q.trim(); document.getElementById("pop").style.display=k?"none":"";
+    const k=q.trim();
     if(!k){drawTop();return}
-    const {ps,ts,toks}=searchAll(k);
-    const tab=(sTab==="t"&&ts.length)||!ps.length&&ts.length?"t":"p";
-    const list=tab==="p"?ps:ts;
-    body.innerHTML=`<div class="stabs" role="tablist"><button class="stab" aria-pressed="${tab==="p"}" data-t="p">悩み <b>${ps.length}</b></button><button class="stab" aria-pressed="${tab==="t"}" data-t="t">用語 <b>${ts.length}</b></button></div>
-    ${!ps.length&&!ts.length?`<div class="empty"><p>「${esc(k)}」に当てはまるものは見つかりませんでした。</p><p>言葉を短くする、別の言い方にする（例：「ほめる」→「ほめ方」）、下のキーワードから選ぶ、などを試してください。</p><div class="pop">${POPULAR.map(w=>`<button class="pw" data-w="${w}">${w}</button>`).join("")}</div></div>`:
-    `<ul class="list ${tab==="t"?"tlist":""}">${list.slice(0,sShow).map(x=>tab==="p"?item(x,snippet(x,toks)):titem(x)).join("")}</ul>
-    ${list.length>sShow?`<button class="allbtn more" id="smore">もっと見る（残り${list.length-sShow}）</button>`:""}`}`;
-    body.querySelectorAll(".stab").forEach(b=>b.onclick=()=>{sTab=b.dataset.t;sShow=20;drawSearch()});
-    const sm=document.getElementById("smore"); if(sm) sm.onclick=()=>{sShow+=20;drawSearch()};
-    body.querySelectorAll(".pw").forEach(b=>b.onclick=()=>setQ(b.dataset.w));
+    const r=DATA.problems.filter(p=>[p.title,p.cat,...p.keywords,...p.signs].join(" ").includes(k));
+    const tr=DATA.terms.filter(t=>[t.term,t.yomi,t.short,t.desc].join(" ").includes(k));
+    body.innerHTML=`<h2 class="sec">悩み <span class="cnt">${r.length}件</span></h2>
+    <ul class="list">${r.length?r.map(item).join(""):`<li class="empty">当てはまる悩みはありません。</li>`}</ul>
+    <h2 class="sec">用語 <span class="cnt">${tr.length}語</span></h2>
+    <ul class="list tlist">${tr.length?tr.map(titem).join(""):`<li class="empty">当てはまる用語はありません。</li>`}</ul>`;
   };
   const drawTop=()=>{
     const _pool=DATA.problems.filter(p=>matchF(p,{stage:S.prefs.stage,level:S.prefs.level})); const _tp=_pool.length?_pool:DATA.problems; const tp=_tp[dayIndex(_tp.length,0)];
-    const recent=Object.entries(S.views).filter(([id])=>P[id]).sort((a,b)=>b[1].last-a[1].last).slice(0,3).map(([id])=>P[id]);
-    body.innerHTML=`<h2 class="sec">分野から探す</h2>
-    <div class="groups">${GROUPS.map(g=>`<div class="grp"><div class="gh"><b>${g.name}</b><span>${g.desc}</span></div>
-      <div class="gc">${g.cats.filter(c=>DATA.categories.some(x=>x.name===c)).map(c=>{const n=DATA.problems.filter(p=>p.cat===c).length;return `<button class="gcat" data-c="${esc(c)}">${esc(c)}<small>${n}</small></button>`}).join("")}</div></div>`).join("")}</div>
-    <h2 class="sec">授業の場面から探す</h2>
-    <div class="qchips">${SCENES.map(s=>`<button class="qc" data-k="scene" data-v="${s}">${s}</button>`).join("")}</div>
+    const tt=DATA.terms.length?DATA.terms[dayIndex(DATA.terms.length,7)]:null;
+    const recent=Object.entries(S.views).filter(([id])=>P[id]).sort((a,b)=>b[1].last-a[1].last).slice(0,4).map(([id])=>P[id]);
+    const pct=Math.round(readN/totalN*100);
+    body.innerHTML=`<a class="today" href="#/p/${tp.id}">
+      <span class="tlab">今日の一つ</span>
+      <span class="ttl2">${esc(tp.title)}</span>
+      <span class="tpt">${esc(tp.points[0]||"")}</span>
+      <span class="tmeta">${esc(tp.cat)}　読む ›</span></a>
+    ${tt?`<a class="todayt" href="#/t/${tt.id}"><span class="tlab">今日の用語</span><b>${esc(tt.term)}</b><span>${esc(tt.short)}</span></a>`:""}
+    <div class="prog" aria-label="読んだ悩みの数"><div class="pl"><span>読んだ悩み</span><b>${readN}</b><span>／ ${totalN}</span></div><div class="bar"><i style="width:${pct}%"></i></div></div>
+    ${recent.length?`<h2 class="sec">最近見た悩み</h2><ul class="list">${recent.map(item).join("")}</ul>`:""}
+    <h2 class="sec">カテゴリーから探す</h2>
+    <div class="grid">${DATA.categories.map(c=>{const ps=DATA.problems.filter(p=>p.cat===c.name);const rd=ps.filter(p=>seen(p.id)).length;
+      return `<a class="tile" href="#/c/${encodeURIComponent(c.name)}"><b>${esc(c.name)}</b><span>${ps.length}件${rd?`・読んだ ${rd}`:""}</span></a>`}).join("")}</div>
     <h2 class="sec">技能から探す</h2>
-    <div class="qchips">${SKILLS.map(s=>`<button class="qc" data-k="skill" data-v="${s}">${s}</button>`).join("")}</div>
-    <a class="today" href="#/p/${tp.id}"><span class="tlab">今日の一つ</span><span class="ttl2">${esc(tp.title)}</span><span class="tpt">${esc(tp.points[0]||"")}</span><span class="tmeta">${esc(tp.cat)}　読む ›</span></a>
-    ${recent.length?`<h2 class="sec">最近見た悩み</h2><ul class="list">${recent.map(p=>item(p)).join("")}</ul>`:""}
-    <p class="prog2">読んだ悩み ${readN} ／ ${totalN}　<a href="#/c/${encodeURIComponent("すべて")}" class="lnk">すべての悩みを一覧で見る ›</a></p>
-    ${canTip?`<div class="itip" id="itip"><b>ホーム画面やパソコンに追加すると、アプリのように使えます</b>
-     <span>iPhone：Safariの共有ボタン → 「ホーム画面に追加」<br>Android：Chromeのメニュー → 「アプリをインストール」<br>パソコン：Chrome・Edgeのアドレスバーのインストールのアイコン</span>
-     <button id="itipx" aria-label="この案内を閉じる">閉じる</button></div>`:""}`;
+    <div class="qchips">${SKILLS.map(s=>`<button class="qc" data-k="skill" data-v="${s}">${s}<small>${DATA.problems.filter(p=>(p.skills||[]).includes(s)).length}</small></button>`).join("")}</div>
+    <h2 class="sec">授業の場面から探す</h2>
+    <div class="qchips">${SCENES.map(s=>`<button class="qc" data-k="scene" data-v="${s}">${s}<small>${DATA.problems.filter(p=>(p.scenes||[]).includes(s)).length}</small></button>`).join("")}</div>
+    <a class="allbtn" href="#/c/${encodeURIComponent("すべて")}">条件で絞り込んで探す（全${totalN}件）</a>`;
     body.querySelectorAll(".qc").forEach(b=>b.onclick=()=>goFilter(b.dataset.k,b.dataset.v));
-    body.querySelectorAll(".gcat").forEach(b=>b.onclick=()=>goCat(b.dataset.c));
-    const ix=document.getElementById("itipx"); if(ix) ix.onclick=()=>{S.hideInstall=true;save();document.getElementById("itip").remove()};
   };
-  const setQ=w=>{q=w;sTab="p";sShow=20;const el=document.getElementById("q");el.value=w;drawSearch();ensureClear()};
-  const ensureClear=()=>{const box=app.querySelector(".sbox");let c=document.getElementById("sclear");if(q&&!c){box.insertAdjacentHTML("beforeend",`<button class="sclear" id="sclear" aria-label="入力を消す">×</button>`);c=document.getElementById("sclear")}if(!q&&c)c.remove();if(c)c.onclick=()=>{q="";document.getElementById("q").value="";drawSearch();ensureClear();document.getElementById("q").focus()}};
-  app.querySelectorAll("#pop .pw").forEach(b=>b.onclick=()=>setQ(b.dataset.w));
-  document.getElementById("q").addEventListener("input",e=>{q=e.target.value;sTab="p";sShow=20;drawSearch();ensureClear()});
-  drawSearch(); ensureClear();
+  drawSearch();
+  const ix=document.getElementById("itipx"); if(ix) ix.onclick=()=>{S.hideInstall=true;save();document.getElementById("itip").remove()};
+  document.getElementById("q").addEventListener("input",e=>{q=e.target.value;drawSearch()});
 }
 
 let sortMode="num";
@@ -157,9 +121,9 @@ function catView(name){
   <h1 class="lead" style="margin-top:10px">${esc(all?"すべての悩み":name)}</h1>
   ${c?`<p class="catdesc">${esc(c.desc)}</p>`:""}
   <p class="catdesc">${r.length}件・読んだ ${rd}件</p>
-  ${(()=>{const act=[F.stage,F.level,F.skill,F.scene].filter(Boolean);return `<details class="fdet" ${act.length?"open":""}><summary>絞り込み（教師の段階・レベル・技能・場面）${act.length?`：${act.length}件の条件`:""}</summary>${filterBar()}</details>`})()}
+  ${filterBar()}
   <div class="chips" role="group" aria-label="並び替え">${Object.entries(sorts).map(([k,l])=>`<button class="chip" aria-pressed="${k===sortMode}" data-s="${k}">${l}</button>`).join("")}</div>
-  <ul class="list">${r.length?r.map(p=>item(p)).join(""):`<li class="empty">この条件に当てはまる悩みはありません。絞り込みの条件を変えてみてください。</li>`}</ul>`;
+  <ul class="list">${r.length?r.map(item).join(""):`<li class="empty">この条件に当てはまる悩みはありません。絞り込みの条件を変えてみてください。</li>`}</ul>`;
   bindFilter(()=>catView(name));
   R.querySelectorAll("[data-s]").forEach(b=>b.onclick=()=>{sortMode=b.dataset.s;catView(name)});
 }
@@ -179,17 +143,16 @@ function detail(id){
    <button class="act fav" aria-pressed="${f}" id="bf">${f?"★ お気に入り済み":"☆ お気に入り"}</button>
    <button class="act tried" aria-pressed="${!!tr}" id="bt">${tr?"✓ 授業で試した":"授業で試した"}</button>
   </div>
-  <div class="toc" role="navigation" aria-label="このページの目次"><button data-j="s-sign">こんなこと</button><button data-j="s-cause">原因</button><button data-j="s-pt">解決のポイント</button><button data-j="s-ex">具体例</button><button data-j="s-pr">練習方法</button></div>
-  <section id="s-sign"><h2>こんなことはありませんか</h2>${ul(p.signs,"b signs")}</section>
-  <section id="s-cause"><h2>原因</h2>${ul(p.causes)}</section>
-  <section id="s-pt"><h2>解決のポイント</h2><ol class="points">${p.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ol></section>
-  <section id="s-ex"><h2>具体例</h2>${p.examples.map(e=>`<div class="ex">
+  <section><h2>こんなことはありませんか</h2>${ul(p.signs,"b signs")}</section>
+  <section><h2>原因</h2>${ul(p.causes)}</section>
+  <section><h2>解決のポイント</h2><ol class="points">${p.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ol></section>
+  <section><h2>具体例</h2>${p.examples.map(e=>`<div class="ex">
     ${e.scene?`<p class="scene">${esc(e.scene)}</p>`:""}
     <div class="say before"><span class="lab">よくある例</span>${esc(e.before)}</div>
     <div class="turn">${arrow}こう変える</div>
     <div class="say after"><span class="lab">改善例</span>${esc(e.after)}</div>
     ${e.note?`<p class="note"><b>ここが変わった：</b>${esc(e.note)}</p>`:""}</div>`).join("")}</section>
-  <section id="s-pr"><h2>一人でできる練習方法</h2>${ul(p.practice,"b practice")}</section>
+  <section><h2>一人でできる練習方法</h2>${ul(p.practice,"b practice")}</section>
   <section class="memo"><h2>ふりかえりメモ</h2>
    <label class="hint" for="mt">試してみてどうだったか、次に変えたいことを書き留めておきましょう。</label>
    <textarea id="mt" placeholder="例：指示を2つに分けたら、ペア活動にすぐ移れた。"></textarea>
@@ -202,7 +165,6 @@ function detail(id){
   <div class="pn">${prevP?`<a href="#/p/${prevP.id}"><small>‹ 前の悩み</small>${esc(prevP.title)}</a>`:"<span></span>"}${nextP?`<a class="nx" href="#/p/${nextP.id}"><small>次の悩み ›</small>${esc(nextP.title)}</a>`:"<span></span>"}</div>
   <p class="ref" style="text-align:center">${esc(p.cat)}の悩み　${si+1} / ${sib.length}</p>`;
   app.querySelectorAll(".tb").forEach(b=>b.onclick=()=>goFilter(b.dataset.k,b.dataset.v));
-  app.querySelectorAll(".toc button").forEach(b=>b.onclick=()=>{const t=document.getElementById(b.dataset.j);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})});
   document.getElementById("bf").onclick=()=>{S.fav=f?S.fav.filter(x=>x!==id):[...S.fav,id];save();toast(f?"お気に入りから外しました":"お気に入りに追加しました");detail(id)};
   document.getElementById("bt").onclick=()=>{if(tr)delete S.tried[id];else S.tried[id]=Date.now();save();toast(tr?"記録を取り消しました":"試した記録をつけました");detail(id)};
   const mt=document.getElementById("mt"),ms=document.getElementById("ms");
@@ -257,7 +219,7 @@ function term(id){
   <p class="tshort">${esc(t.short)}</p>
   <div class="actions"><button class="act fav" aria-pressed="${f}" id="tf">${f?"★ お気に入り済み":"☆ お気に入り"}</button></div>
   <section><h2>解説</h2><p class="desc">${esc(t.desc)}</p></section>
-  ${(t.ex||[]).length?`<section id="s-ex"><h2>具体例</h2><ul class="exl">${t.ex.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></section>`:""}
+  ${(t.ex||[]).length?`<section><h2>具体例</h2><ul class="exl">${t.ex.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></section>`:""}
   ${t.bg?`<section><h2>背景・経緯</h2><p class="desc">${esc(t.bg)}</p></section>`:""}
   ${(t.pit||[]).length?`<section><h2>よくある誤解・注意点</h2><ul class="pit">${t.pit.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></section>`:""}
   ${t.use.length?`<section><h2>現場での活かし方</h2><ul class="b practice">${t.use.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></section>`:""}
@@ -270,7 +232,7 @@ function term(id){
 function fav(){
   const r=S.fav.map(i=>P[i]).filter(Boolean);
   app.innerHTML=`<p class="brand">授業の引き出し</p><h1 class="lead">お気に入り</h1>
-  <h2>悩み</h2><ul class="list">${r.length?r.map(p=>item(p)).join(""):`<li class="empty">まだありません。悩みのページで「☆ お気に入り」を押すと、ここに集まります。</li>`}</ul>
+  <h2>悩み</h2><ul class="list">${r.length?r.map(item).join(""):`<li class="empty">まだありません。悩みのページで「☆ お気に入り」を押すと、ここに集まります。</li>`}</ul>
   <h2 style="margin-top:28px">用語</h2><ul class="list tlist">${S.favT.filter(i=>TM[i]).length?S.favT.filter(i=>TM[i]).map(i=>titem(TM[i])).join(""):`<li class="empty">まだありません。用語のページで「☆ お気に入り」を押すと、ここに集まります。</li>`}</ul>`;
 }
 function log(){
