@@ -1,6 +1,6 @@
 // 授業の引き出し Service Worker
 // VERSION は tools/build.py が更新します。アプリ本体を変えたときは必ず更新してください。
-const VERSION = "20260927-111006";
+const VERSION = "20260927-141518";
 const SHELL_CACHE = "hikidashi-shell-" + VERSION;
 const DATA_CACHE = "hikidashi-data";
 const FONT_CACHE = "hikidashi-fonts";
