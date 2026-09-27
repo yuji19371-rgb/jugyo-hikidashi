@@ -1,11 +1,11 @@
 // 授業の引き出し Service Worker
 // VERSION は tools/build.py が更新します。アプリ本体を変えたときは必ず更新してください。
-const VERSION = "20260927-083249";
+const VERSION = "20260927-091933";
 const SHELL_CACHE = "hikidashi-shell-" + VERSION;
 const DATA_CACHE = "hikidashi-data";
 const FONT_CACHE = "hikidashi-fonts";
 const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest",
-  "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png", "./icons/apple-touch-icon.png"];
+  "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(SHELL_CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
